@@ -1,0 +1,78 @@
+SPARSE AUTOENCODER CHEMICAL FACTOR ANALYSIS REPORT
+================================================================================
+
+DATASET SUMMARY:
+----------------------------------------
+Total molecules analyzed: 32054
+Embedding dimension: 256
+Number of latent factors discovered: 128
+Number of reward signals: 6
+Train/test split: 28848/3206
+
+REWARD PREDICTION PERFORMANCE:
+----------------------------------------
+drug_likeness       : Train R² = 0.289, Test R² = 0.251
+complexity          : Train R² = 0.756, Test R² = 0.750
+lipophilicity       : Train R² = 0.670, Test R² = 0.664
+size                : Train R² = 0.735, Test R² = 0.711
+polarity            : Train R² = 0.920, Test R² = 0.918
+flexibility         : Train R² = 0.488, Test R² = 0.502
+
+LATENT FACTOR ANALYSIS:
+----------------------------------------
+Sparsity Statistics (fraction of molecules with factor > 0.1):
+  Mean: 0.105
+  Std:  0.171
+  Min:  0.000
+  Max:  0.666
+
+TOP FACTOR-REWARD ASSOCIATIONS:
+----------------------------------------
+Factor_11    → size                 (r =  0.757)
+Factor_75    → size                 (r = -0.574)
+Factor_86    → polarity             (r = -0.570)
+Factor_118   → polarity             (r =  0.540)
+Factor_28    → size                 (r =  0.525)
+Factor_12    → size                 (r = -0.507)
+Factor_52    → polarity             (r =  0.446)
+Factor_49    → size                 (r = -0.422)
+Factor_34    → polarity             (r = -0.415)
+Factor_96    → complexity           (r = -0.412)
+
+REWARD-SPECIFIC FACTOR SUMMARY:
+----------------------------------------
+drug_likeness       : Factor_28(0.379), Factor_62(0.325), Factor_11(0.310)
+complexity          : Factor_96(0.412), Factor_29(0.380), Factor_86(0.365)
+lipophilicity       : Factor_11(0.412), Factor_86(0.387), Factor_118(0.355)
+size                : Factor_11(0.757), Factor_75(0.574), Factor_28(0.525)
+polarity            : Factor_86(0.570), Factor_118(0.540), Factor_52(0.446)
+flexibility         : Factor_55(0.375), Factor_11(0.334), Factor_36(0.300)
+
+CONFIGURATION USED:
+----------------------------------------
+{
+  "data": {
+    "embedding_file": "/home/ubuntu/synflownet/src/neurips_poster/results_qed_run/embeddings.csv",
+    "test_size": 0.1
+  },
+  "autoencoder": {
+    "hidden_dim": 128,
+    "epochs": 200,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "sparsity_weight": 0.01,
+    "sparsity_target": 0.05,
+    "sparsity_method": "l1",
+    "dropout": 0.1
+  },
+  "reward_predictor": {
+    "epochs": 100,
+    "learning_rate": 0.001,
+    "dropout": 0.2
+  },
+  "output": {
+    "results_dir": "/home/ubuntu/synflownet/src/neurips_poster/results_qed_run/sparse_autoencoder_dim_128",
+    "save_models": true,
+    "save_plots": true
+  }
+}

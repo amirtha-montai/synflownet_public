@@ -1,0 +1,10 @@
+{
+    "CHECKPOINT_PATH": "/home/ubuntu/synflownet_public/training_logs/logs/debug_run_reactions_task_2025-09-04_21-38-54/model_state.pt",
+    "SMILES_PATH": "/home/ubuntu/synflownet_public/src/interpretability/results_qed_run/unique_smiles.csv",
+    "DB_PATH": "/home/ubuntu/synflownet_public/training_logs/logs/debug_run_reactions_task_2025-09-04_21-38-54/final/generated_objs_0.db",
+    "INTERPRETABILITY_TRAJ": "/home/ubuntu/synflownet_public/training_logs/logs/debug_run_reactions_task_2025-09-04_21-38-54/interpretability_trajs_0.json",
+    "SAVE_DIR": "./results_qed_run",
+    "BATCH_SIZE": 100,
+    "SAVE_PATH": "embeddings.pkl",
+    "COMMENT": "Run with updated motif definitions, actual checkpoint and its corresponding SMILES file - extracted smiles from database using simple_extract_smiles.py"
+}
