@@ -162,3 +162,4 @@ cython_debug/
 
 # ignore large data files
 **/*.pkl
+**/embeddings.csv
