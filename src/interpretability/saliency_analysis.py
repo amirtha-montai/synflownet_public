@@ -9,7 +9,6 @@ decisions. It includes functionality for:
 - Generating counterfactual edits to improve QED scores
 - Visualizing attribution heatmaps
 
-Author: SynFlowNet Team
 """
 
 import os
