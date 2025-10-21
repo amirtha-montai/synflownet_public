@@ -31,6 +31,7 @@ def get_current_task_dir():
 
 # For Smiles in the slide deck
 SMILES_TRAJ_DICT = {
+    "Cc1nc(N)c(C(=O)N2CC(C(=O)O)C(C3CCCCC3)C2)cc1F": "[('', <GraphActionType.AddFirstReactant, 1239>), ('Cc1nc(N)c(C(=O)O)cc1F', <GraphActionType.ReactBi, 72, 885>), ('Cc1nc(N)c(C(=O)N2CC(C(=O)O)C(C3CCCCC3)C2)cc1F', <GraphActionType.ReactUni, 9>), ('Cc1nc(N)c(C(=O)N2CC(C(=O)O)C(C3CCCCC3)C2)cc1F', <GraphActionType.Stop, 0, 0>)]",
     "CCCN(C)CC1CCN(C(=O)CC(N)c2ccc(OC)nc2)C1":"[('', <GraphActionType.AddFirstReactant, 2119>), ('COc1ccc(C(N)CC(=O)O)cn1', <GraphActionType.ReactBi, 72, 2122>), ('CCCN(C)CC1CCN(C(=O)CC(N)c2ccc(OC)nc2)C1', <GraphActionType.ReactBi, 87, 508>), ('CCCN(C)CC1CCN(C(=O)CC(N)c2ccc(OC)nc2)C1', <GraphActionType.Stop, 0, 0>)]"
 }
 
