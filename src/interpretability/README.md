@@ -94,5 +94,4 @@ Run the pipeline in order:
 
 ## Requirements
 
-Install the synflownet repo and train a model to completion. Use checkpoints here.
-The file `unique_smiles.csv` can be extracted with 
+Install the synflownet repo and train a model to completion. Use checkpoints present in the folders here.
