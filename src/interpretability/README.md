@@ -94,4 +94,4 @@ Run the pipeline in order:
 
 ## Requirements
 
-Install the synflownet repo and train a model to completion. Use checkpoints present in the folders here.
+Install the synflownet repo and train a model to completion. Use checkpoints to interpret in this module.
