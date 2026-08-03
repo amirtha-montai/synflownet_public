@@ -1,0 +1,17 @@
+{
+  "seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "n_features": 1024,
+  "k": 64,
+  "epochs": 50,
+  "n_molecules": 32054,
+  "input_dim": 256,
+  "device": "cpu",
+  "rdkit": "2023.09.5",
+  "torch": "2.1.2+cu121"
+}

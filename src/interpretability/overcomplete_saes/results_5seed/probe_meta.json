@@ -1,0 +1,16 @@
+{
+  "n_molecules": 32054,
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "representations": [
+    "raw",
+    "latent",
+    "reconstruction"
+  ],
+  "rdkit": "2023.09.5"
+}

@@ -166,3 +166,9 @@ cython_debug/
 # Building-block masks are required to reproduce arXiv 2511.19264 — the
 # generic **/*.pkl rule above would silently drop them.
 !src/synflownet/data/building_blocks/precomputed_bb_masks_enamine_bbs.pkl
+
+# Overcomplete-SAE derived artifacts — regenerable from embeddings.csv via run_all.sh.
+# The small result tables ARE tracked; these large intermediates are not.
+src/interpretability/overcomplete_saes/cache/
+src/interpretability/overcomplete_saes/**/latents.npz
+src/interpretability/overcomplete_saes/**/*.pt

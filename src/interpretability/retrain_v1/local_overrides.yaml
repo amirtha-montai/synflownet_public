@@ -1,0 +1,84 @@
+# Overrides to retrain the SynFlowNet checkpoint analysed in arXiv 2511.19264.
+#
+# reactions_task.py reads a file named `local_overrides.yaml` from the working
+# directory (see LOCAL_OVERRIDES in that file), applied on top of the hardcoded
+# defaults in its main(). Every value below is taken from the surviving config of
+# the original run (training_config_qed_arxiv_2511.19264.yaml, git_hash d134838)
+# and differs from those defaults — matching values are omitted.
+#
+# The original checkpoint no longer exists. Retraining will NOT reproduce it
+# bit-for-bit (GPU nondeterminism), so treat the result as a re-derivation:
+# embeddings from it are a new dataset, and any SAE must be retrained on them.
+
+seed: 0
+device: cuda
+reward: qed                    # default is seh_reaction
+num_training_steps: 1000       # default 5000
+num_final_gen_steps: 1000      # default 100 — these are the molecules analysed
+validate_every: 500
+print_every: 1
+overwrite_existing_exp: true
+num_workers: 0
+
+model:
+  num_layers: 4
+  num_emb: 128
+  dropout: 0.0
+  # REQUIRED: without this the graph embeddings cannot be extracted afterwards
+  enable_interpretability: true
+  graph_transformer:
+    num_heads: 2
+    ln_type: pre
+    num_mlp_layers: 0
+    concat_heads: true
+    continuous_action_embs: true
+    fingerprint_type: morgan_1024
+
+opt:
+  learning_rate: 0.0001
+  lr_decay: 2000.0
+
+algo:
+  max_len: 3
+  illegal_action_logreward: -75.0
+  sampling_tau: 0.2            # default in main() is 0.99
+  num_from_policy: 64
+  num_from_buffer_for_pb: 64
+  strict_forward_policy: false
+  strict_bck_masking: false
+  synthesis_cost_as_bck_reward: false
+  tb:
+    variant: TB
+    backward_policy: MaxLikelihood
+    do_parameterize_p_b: true
+    do_sample_p_b: false
+    do_correct_idempotent: false
+    reinforce_loss_multiplier: 1.0
+    bck_entropy_loss_multiplier: 1.0
+    Z_learning_rate: 0.001
+    Z_lr_decay: 50000.0
+
+cond:
+  temperature:
+    sample_dist: uniform       # default in main() is constant [32.0]
+    dist_params: [8.0, 64.0]
+    num_thermometer_dim: 32
+
+replay:
+  use: false
+
+# NOTE ON THESE FOUR VALUES
+# The correct config path is task.reactions_task (not env.reactions).
+# More importantly, synthesis_building_env.py reads the building blocks and the
+# precomputed masks AT IMPORT TIME from the ReactionTaskConfig *class defaults*,
+# not from these overrides -- and the read is wrapped in os.path.exists(), so a
+# missing file loads nothing instead of raising. The class defaults already are
+# enamine_bbs.txt / precomputed_bb_masks_enamine_bbs.pkl, so the values below are
+# a no-op restatement kept for documentation. To change building blocks you must
+# edit src/synflownet/tasks/config.py, not this file.
+task:
+  reactions_task:
+    templates_filename: hb.txt
+    building_blocks_filename: enamine_bbs.txt
+    precomputed_bb_masks_filename: precomputed_bb_masks_enamine_bbs.pkl
+    sanitize_building_blocks: false
