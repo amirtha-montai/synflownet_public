@@ -1,7 +1,7 @@
 """
 Use graphviz to visualize the reactions from SynFlowNet.
 Given the reaction trajectory of a synflownet, plot the reaction trajectories
-Plot for molecules in https://www.notion.so/montai/Plotting-the-reaction-trajectories-23e39e26fde38043865aeeecc9093900?source=copy_link#23f39e26fde38057a5d7e6e78624da3a
+Plot for the reaction trajectories of selected molecules.
 
 """
 

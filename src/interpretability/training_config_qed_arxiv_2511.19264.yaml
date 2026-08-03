@@ -1,0 +1,162 @@
+desc: noDesc
+log_dir: ./logs/debug_run_reactions_task_2025-09-04_21-38-54
+resume: null
+device: cuda
+seed: 0
+validate_every: 500
+checkpoint_every: null
+store_all_checkpoints: false
+print_every: 1
+start_at_step: 0
+num_final_gen_steps: 1000
+num_validation_gen_steps: 100
+num_training_steps: 1000
+num_workers: 0
+hostname: ip-10-65-197-122
+pickle_mp_messages: false
+mp_buffer_size: 536870912
+git_hash: d134838
+overwrite_existing_exp: true
+algo:
+  method: TB
+  num_from_policy: 64
+  num_from_dataset: 0
+  num_from_buffer_for_pb: 64
+  valid_num_from_policy: 64
+  valid_num_from_dataset: 0
+  max_len: 3
+  max_nodes: 9
+  max_edges: 128
+  illegal_action_logreward: -75.0
+  illegal_bck_traj_reward: -1.0
+  bck_reward_exponent: 1.0
+  synthesis_cost_as_bck_reward: false
+  strict_forward_policy: false
+  strict_bck_masking: false
+  train_random_action_prob: 0.2
+  train_det_after: null
+  valid_random_action_prob: 0.1
+  sampling_tau: 0.2
+  tb:
+    bootstrap_own_reward: false
+    epsilon: null
+    reward_loss_multiplier: 1.0
+    variant: TB
+    do_correct_idempotent: false
+    do_parameterize_p_b: true
+    do_predict_n: false
+    do_sample_p_b: false
+    do_length_normalize: false
+    subtb_max_len: 128
+    Z_learning_rate: 0.001
+    Z_lr_decay: 50000.0
+    cum_subtb: true
+    loss_fn: MSE
+    loss_fn_par: 1.0
+    n_loss: none
+    n_loss_multiplier: 1.0
+    reinforce_loss_multiplier: 1.0
+    bck_entropy_loss_multiplier: 1.0
+    mle_loss_multiplier: 1.0
+    backward_policy: MaxLikelihood
+  moql:
+    gamma: 1.0
+    num_omega_samples: 32
+    num_objectives: 2
+    lambda_decay: 10000
+    penalty: -10.0
+  a2c:
+    entropy: 0.01
+    gamma: 1.0
+    penalty: -10.0
+  fm:
+    epsilon: 1.0e-38
+    balanced_loss: false
+    leaf_coef: 10.0
+    correct_idempotent: false
+  sql:
+    alpha: 0.01
+    gamma: 1.0
+    penalty: -10.0
+    do_q_prime_correction: false
+    lagged_model_update_freq: null
+    lagged_model_tau: 1.0
+model:
+  num_layers: 4
+  num_emb: 128
+  dropout: 0.0
+  enable_interpretability: true
+  graph_transformer:
+    num_heads: 2
+    ln_type: pre
+    num_mlp_layers: 0
+    concat_heads: true
+    continuous_action_embs: true
+    fingerprint_type: morgan_1024
+    fingerprint_path: null
+opt:
+  opt: adam
+  learning_rate: 0.0001
+  lr_decay: 2000.0
+  weight_decay: 1.0e-08
+  momentum: 0.9
+  clip_grad_type: norm
+  clip_grad_param: 10.0
+  adam_eps: 1.0e-08
+replay:
+  use: false
+  capacity: 10000
+  warmup: 64
+  hindsight_ratio: 0.0
+  num_from_replay: 32
+  num_new_samples: 64
+task:
+  reactions_task:
+    templates_filename: hb.txt
+    reverse_templates_filename: null
+    reward: null
+    building_blocks_filename: enamine_bbs.txt
+    precomputed_bb_masks_filename: precomputed_bb_masks_enamine_bbs.pkl
+    building_blocks_costs: null
+    sanitize_building_blocks: false
+    add_first_reactant_bbs: null
+cond:
+  valid_sample_cond_info: true
+  temperature:
+    sample_dist: uniform
+    dist_params:
+    - 8.0
+    - 64.0
+    num_thermometer_dim: 32
+  moo:
+    num_objectives: 2
+    num_thermometer_dim: 16
+  weighted_prefs:
+    preference_type: dirichlet
+    preference_param: 1.5
+  focus_region:
+    focus_type: centered
+    use_steer_thermomether: false
+    focus_cosim: 0.98
+    focus_limit_coef: 0.1
+    focus_model_training_limits:
+    - 0.25
+    - 0.75
+    focus_model_state_space_res: 30
+    max_train_it: 20000
+interpretability:
+  enable: false
+  sae_hidden_dim: null
+  sae_sparsity_penalty: 0.001
+  sae_learning_rate: 0.001
+  sae_epochs: 50
+  collect_embeddings: true
+  embedding_collection_frequency: 250
+  analysis_output_dir: ./interpretability_results
+reward: qed
+checkpoint_montai: null
+task_column: null
+vina:
+  opencl_binary_path: bin/QuickVina2-GPU-2-1
+  vina_path: bin/QuickVina2-GPU-2-1/Vina-GPU
+  target: kras
