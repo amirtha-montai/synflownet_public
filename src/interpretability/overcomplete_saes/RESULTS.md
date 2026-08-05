@@ -8,7 +8,12 @@ ours and labelled as such.
 **Dataset.** 32,054 molecules, 256-d graph embeddings, from the SynFlowNet analysed in
 arXiv 2511.19264 (QED reward). Split 90/10 for the SAE; 80/10/10 for probes.
 **Environment.** rdkit 2023.09.5 (the pinned version — QED is version-sensitive), torch 2.1.2+cu121,
-scikit-learn 1.2.2, Tesla T4.
+scikit-learn 1.2.2, numpy 1.26.4, pandas 2.3.3, scipy 1.15.3, matplotlib 3.10.7, python 3.10.14,
+Tesla T4. Pinned in `env/requirements.txt`, `env/environment.yml`, and `env/requirements-freeze.txt`
+(224 packages, byte-exact); machine-readable in `env/versions.json`.
+**Splits.** Results are reported for BOTH a random split and a Bemis-Murcko scaffold-disjoint split
+(§4.3); the scaffold split is the one to report. **Read both alongside §4.4**, the untrained-network
+control, which shows that neither split's probe scores evidence learned chemistry.
 **Seeds.** SAE 42–46; probes 0–4.
 
 ---
@@ -21,15 +26,22 @@ scikit-learn 1.2.2, Tesla T4.
    reported. The 1024/k=64 configuration needs no special justification.
 3. **The overcomplete SAE beats a matched undercomplete baseline** on reconstruction — NMSE
    0.00151 vs 0.00263, a 1.75× improvement — on the *identical* split, seeds and data.
-4. **The embedding does not beat cheap descriptors on any standard property.** With
-   target-leakage removed, RDKit counts + ECFP4 match or exceed the embedding on 10 of 11 targets.
-   This does not mean the embedding is uninformative (§4.2) but it does rule out the claim that the
-   model learned chemistry descriptors lack.
-5. **Individual features have specific, causal influence.** Ablating one of 1024 features moves one
+4. **An UNTRAINED network of identical architecture decodes every property essentially as well as
+   the trained policy.** Training buys at most **+0.036** (flexibility) and only **+0.005** on
+   drug-likeness; on size and molecular weight the untrained net is marginally *better*. This is the
+   decisive control: what the probes recover is a property of the graph architecture and the input
+   featurisation, **not of anything the model learned** (§4.4).
+5. **Whether the embedding beats cheap descriptors depends on the split** — descriptors win on 10 of
+   11 under a random split, the embedding wins on 8 of 11 under a scaffold-disjoint split (§4.3).
+   But finding 4 means this is a statement about *graph architectures vs fingerprints*, not about
+   learned chemistry.
+6. **Individual features have specific, causal influence.** Ablating one of 1024 features moves one
    property with specificity ratios up to **44×**.
-6. **Halogen-subtype factorization replicates, and more cleanly than before** — separate,
+7. **Halogen-subtype factorization replicates, and more cleanly than before** — separate,
    near-perfect F, Cl, Br and I detectors, plus a boron/boronic-acid detector, all at q < 1e-10.
-7. **Individual features are mostly NOT reproducible across runs.** Mean cross-seed dictionary
+8. **The embedding score is robust to scaffold splitting** (drug-likeness 0.586 → 0.587), so the
+   random-split numbers were not inflated by scaffold leakage — a real concern the data rules out.
+9. **Individual features are mostly NOT reproducible across runs.** Mean cross-seed dictionary
    similarity is 0.237 against a chance baseline of 0.214 — only **1.11× chance**. A small core
    (~1–3%) does reproduce far above chance. **Any named feature ID must be stability-checked
    before it is interpreted.**
@@ -122,13 +134,126 @@ than informative. Those columns are dropped per target and the leakage-free numb
 reported above. `T_probes_summary.csv` carries both (`descriptor_mean`, `descriptor_noleak_mean`)
 and a `baseline_leaky` flag.
 
-### 4.2 What this does and does not license
+### 4.2 Target prevalence (for the appendix table)
+
+| Target | Prevalence | Positives / 32,054 |
+|---|---|---|
+| aromaticity | 90.61% | 29,045 |
+| halogen | 49.93% | 16,005 |
+| urea | **0.95%** | 306 |
+| boron | 0.29% | 92 |
+
+Note urea is **0.95%**, not the 1.7% previously reported. The urea AUROC of 0.92 rests on 306
+positives, so it carries the widest seed spread of any target (± 0.024).
+
+### 4.3 Scaffold-disjoint split — the split to report
+
+A random split over molecules sampled from a *single* generative policy risks leaking
+near-duplicates of the same scaffold across the train/test boundary. We therefore repeated every
+probe with a Bemis-Murcko scaffold split: 18,650 distinct scaffolds, 14,905 of them singletons;
+train 25,643 / val 3,205 / test 3,206 with **zero train-test scaffold overlap**, and the test set
+holding 3,206 *distinct* scaffolds — every test molecule is a scaffold singleton, the strictest
+form of the check. Scaffold groups are assigned largest-first to train (the DeepChem convention),
+so the test set holds the rarest chemistry. Seeds shuffle tie-broken group order, giving five
+genuinely different scaffold-disjoint splits.
+
+**The embedding is essentially unaffected; the descriptor baseline is not.**
+
+| Target | Embedding, random | Embedding, scaffold | Descriptor, scaffold | Gap, random | **Gap, scaffold** |
+|---|---|---|---|---|---|
+| drug-likeness (QED) | 0.586 | **0.587** | 0.568 | −0.026 | **+0.019** |
+| complexity ring-proxy | 0.949 | 0.930 | 0.879 | +0.036 | **+0.051** |
+| size / molecular weight | 0.997 | 0.997 | 0.983 | +0.016 | +0.014 |
+| polarity | 0.993 | 0.993 | 0.983 | +0.008 | +0.009 |
+| boron (AUROC) | 1.000 | 1.000 | 0.995 | +0.000 | +0.005 |
+| halogen / aromaticity | 1.000 | 1.000 | 1.000 | ≈0 | ≈0 |
+| lipophilicity | 0.886 | 0.890 | 0.958 | −0.073 | −0.068 |
+| urea (AUROC) | 0.922 | 0.898 | 0.998 | −0.077 | −0.100 |
+| flexibility | 0.694 | 0.637 | 0.880 | −0.202 | −0.243 |
+
+Largest embedding changes: flexibility −0.057, urea −0.024, complexity −0.019; everything else
+within ±0.005. **Drug-likeness moves +0.001.** So scaffold leakage was *not* inflating the
+embedding numbers.
+
+But the descriptor baseline for QED falls 0.612 → 0.568, which **flips the gap from −0.026 to
++0.019**. Under the harder split the embedding wins on **8 of 11** targets. It still loses on
+flexibility, urea and lipophilicity.
+
+**Interpretation.** ECFP4 leans on scaffold memorisation more than the embedding does. The
+random-split comparison therefore flatters the descriptors, and the honest headline is that a
+scaffold-disjoint evaluation puts the learned representation modestly *ahead* on composite
+properties while cheap descriptors remain better for rotatable-bond count, urea presence and LogP.
+
+Figure: `figs/F9_split_comparison.pdf` (left: embedding robust; right: the gap moving).
+
+### 4.4 Random-network control — the decisive result
+
+Figure: `figs/F10_random_network_control.pdf` · Table: `T_probes_summary_randomnet.csv`,
+`random_net_meta.json`
+
+We instantiated `GraphTransformerSynGFN` with the analysed architecture — 4 layers, `num_emb` 128,
+2 heads, morgan_1024 fingerprints, 2,905,046 parameters — left it **untrained at random
+initialisation**, and extracted graph embeddings for the same 32,054 molecules (0 failures). Then we
+ran the identical linear probes. This control needs only the architecture, not a checkpoint, so it
+was available even though the analysed weights are gone.
+
+| Target | Trained | **Untrained** | Training buys | Descriptor baseline |
+|---|---|---|---|---|
+| flexibility (R²) | 0.6944 | 0.6584 ± 0.0109 | **+0.0360** | 0.8965 |
+| lipophilicity (R²) | 0.8857 | 0.8663 ± 0.0044 | +0.0194 | 0.9589 |
+| urea (AUROC) | 0.9221 | 0.9041 ± 0.0195 | +0.0180 | 0.9992 |
+| **drug-likeness (R²)** | 0.5860 | **0.5815 ± 0.0158** | **+0.0045** | 0.6117 |
+| complexity ring-proxy (R²) | 0.9485 | 0.9463 ± 0.0044 | +0.0022 | 0.9125 |
+| aromaticity (AUROC) | 0.9999 | 0.9994 | +0.0005 | 1.0000 |
+| polarity (R²) | 0.9931 | 0.9928 | +0.0002 | 0.9855 |
+| halogen (AUROC) | 0.9999 | 0.9999 | +0.0001 | 0.9999 |
+| boron (AUROC) | 1.0000 | 0.9999 | +0.0001 | 1.0000 |
+| size / molecular weight (R²) | 0.9965 | **0.9982** | **−0.0018** | 0.9801 |
+
+**Training contributes almost nothing to linear decodability.** The largest gain is +0.036 on
+flexibility; on the headline property, drug-likeness, it is **+0.0045**, well inside the ±0.016 seed
+spread. On size and molecular weight the *untrained* network is marginally better.
+
+**What this means.** A randomly-initialised graph transformer over the same atom featurisation
+already produces embeddings from which these properties are linearly decodable. So the probe results
+in §4.1 and §4.3 characterise the **architecture and input representation**, not learned structure.
+This is a stronger and cleaner statement than the descriptor comparison, because it holds the
+architecture, featurisation, probe and split fixed and varies *only* whether the weights were
+trained.
+
+It also reframes §4.3: the embedding beating fingerprints under a scaffold split is real, but it is
+not evidence of learning — an untrained network would show the same advantage. Random graph features
+are simply good features for these targets.
+
+**What it does NOT mean.** Training obviously did something — the trained policy generates
+high-reward synthesizable molecules and the untrained one cannot. The correct conclusion is that
+*linear probing of physicochemical properties is insensitive to what the training accomplished*, so
+this family of probes should not be used as evidence of learned chemical knowledge.
+
+**Suggested wording:** "A randomly-initialised network of identical architecture decodes every
+probed property to within 0.036 of the trained policy (drug-likeness: 0.582 ± 0.016 untrained vs
+0.586 trained), and is marginally better on molecular size. Linear decodability of physicochemical
+properties therefore reflects the graph architecture and atom featurisation rather than learned
+representation, and we do not interpret high probe scores as evidence of acquired chemical
+knowledge."
+
+**Untested implication, worth stating.** The SAE features in §5–§6 were derived from the *trained*
+embeddings. Whether an SAE trained on the untrained network's embeddings would also yield clean
+per-halogen detectors is not tested here, and it is the obvious next control.
+
+### 4.5 What this does and does not license
 
 **Does not license:** "the embedding provides no useful information." In absolute terms it decodes
 QED at R² 0.59, size at 0.997, halogen at AUROC 1.000, with random-label at chance. That is real
 linearly-accessible chemical information.
 
-**Does license:** the embedding carries no information *beyond cheap descriptors* for these targets.
+**Does license, under a random split only:** the embedding carries no information *beyond cheap
+descriptors* for these targets. Under a scaffold split this reverses for 8 of 11 (§4.3), so the
+random-split framing should not be quoted on its own.
+
+**The stronger, split-independent statement** comes from §4.4: an untrained network of identical
+architecture matches the trained one everywhere, so none of these probe scores evidence learned
+chemistry regardless of how the data is split.
 Note what the targets are — QED, LogP, TPSA, MW, rotatable-bond count, halogen presence — every one a
 deterministic function of the molecular graph that RDKit computes directly. ECFP4 plus atom counts
 was always going to be near-perfect at these. The comparison is worth reporting because it prevents
@@ -318,10 +443,11 @@ bottleneck, and the sign of the drug-likeness latent delta.
 - Drug-likeness is *more* linearly accessible in the sparse latent than in the dense embedding.
 
 **Not supported — do not claim:**
-- That the embedding encodes chemistry beyond what cheap descriptors provide. Ten of eleven properties are matched or beaten by RDKit counts + ECFP4.
+- **That high probe scores evidence learned chemical knowledge.** An untrained network of identical architecture matches the trained one on every property (largest gap +0.036; drug-likeness +0.005). This is the single most important negative result.
+- That the embedding encodes chemistry beyond cheap descriptors. Under a random split ten of eleven properties are matched or beaten by RDKit counts + ECFP4; under a scaffold split the embedding leads on eight of eleven, but §4.4 shows an untrained net would too.
 - That near-perfect probe scores demonstrate learned chemical understanding. Size, halogen, aromaticity and boron are trivially decodable; the controls show it.
 - That specific feature indices are meaningful across runs. Only ~1–3% reproduce above chance.
-- That the model has "internalized structure–activity reasoning." Nothing here tests that.
+- That the model has "internalized structure–activity reasoning." Nothing here tests that, and §4.4 shows this probe family cannot.
 - Any steering or generation-time controllability claim. Not attempted.
 
 **Terminology.** A 256→128 model is *undercomplete* and cannot support monosemanticity or
@@ -343,6 +469,8 @@ bottleneck autoencoder, closer to sparse PCA.
 | `F6_feature_stability` | Observed vs chance dictionary similarity |
 | `F7_intervention_matrix` | Feature × property ablation deltas |
 | `F8_feature_semanticity` | Mono/poly split; activation-frequency distribution |
+| `F9_split_comparison` | Random vs scaffold-disjoint split: score robustness and the gap flip |
+| `F10_random_network_control` | Trained vs untrained identical architecture vs descriptors |
 
 | Table | Content |
 |---|---|
@@ -353,6 +481,11 @@ bottleneck autoencoder, closer to sparse PCA.
 | `T_monosemanticity.csv` | Mono/poly counts |
 | `T_feature_ablation.csv`, `T_ablation_specificity.csv` | Intervention matrix and specificity ratios |
 | `T_feature_stability.csv`, `_summary.csv` | Cross-seed similarity, observed and chance |
+| `T_probes_summary_scaffold.csv`, `T_probes_scaffold.csv` | All probe results under the scaffold-disjoint split |
+| `T_probes_summary_randomnet.csv` | Probes including the untrained-network control |
+| `embeddings_random_net.npy`, `random_net_meta.json` | Untrained-network embeddings (32,054 × 256) and its architecture record |
+| `NUMBERS_MANIFEST.csv` / `.json` | Every quoted number → producing script → source table → value, with per-table SHA-256 |
+| `env/requirements.txt`, `environment.yml`, `requirements-freeze.txt`, `versions.json` | Pinned environment |
 
 All figures are PDF (vector) + 300 dpi PNG and are built only from the CSVs, so they regenerate
 without a GPU: `python make_plots.py --results-dir results_5seed --out-dir figs`.
@@ -365,9 +498,8 @@ without a GPU: `python make_plots.py --results-dir results_5seed --out-dir figs`
 2. **The analysed checkpoint no longer exists.** Embeddings are the surviving artifact; the training
    recipe is preserved at `../retrain_v1/local_overrides.yaml` but retraining will not reproduce it
    bit-for-bit, and a new checkpoint would require a newly trained SAE.
-3. **No random-network control.** Whether an untrained network of identical architecture would score
-   similarly is not yet tested; it needs only the architecture, not a trained checkpoint, so it is
-   the cheapest remaining strengthening.
+3. **Random-network control:** run — see §4.4. It needs only the architecture, not a trained
+   checkpoint, so it remains available even though the analysed weights are gone.
 4. **`complexity` is not a synthetic-accessibility score.** It reproduces the original definition,
    `1 − min(1, 0.1·n_aliphatic_rings + 0.05·n_aromatic_rings + 0.5)` — a clipped two-ring-count
    proxy. Named `complexity_ringproxy` throughout to stop the mislabel propagating.
@@ -375,5 +507,7 @@ without a GPU: `python make_plots.py --results-dir results_5seed --out-dir figs`
    are unaffected, but tighter convergence would quiet the warnings.
 6. **Two seed families.** SAE seeds 42–46 control dictionary initialisation; probe seeds 0–4 control
    data splits. They are independent and both are reported.
-7. **Ablation uses seed 42's dictionary only.** Given §7, the specific feature indices in §6 are not
+7. **Scaffold splitting was applied to the probes, not to SAE training.** The SAE is unsupervised
+   and sees all embeddings, which is standard, but a fully scaffold-held-out SAE is untested.
+8. **Ablation uses seed 42's dictionary only.** Given §7, the specific feature indices in §6 are not
    portable to other seeds; the *distribution* of specificity ratios is the transferable claim.

@@ -71,6 +71,8 @@ def run_probes(
     descriptor_X: np.ndarray,
     seeds=(0, 1, 2, 3, 4),
     save_weights_for: str = "latent",
+    split: str = "random",
+    smiles=None,
 ):
     """Probe every representation against every target, with controls.
 
@@ -82,7 +84,12 @@ def run_probes(
     n = len(targets)
 
     for seed in seeds:
-        tr, _va, te = _split(n, seed)
+        if split == "scaffold":
+            if smiles is None:
+                raise ValueError("scaffold split needs smiles")
+            tr, _va, te, _info = P.scaffold_split(smiles, seed=seed)
+        else:
+            tr, _va, te = _split(n, seed)
         rng = np.random.default_rng(seed)
 
         for target in P.ALL_TARGETS:
@@ -118,6 +125,7 @@ def run_probes(
                         "task": "classification" if is_clf else "regression",
                         "metric": "AUROC" if is_clf else "R2",
                         "seed": seed,
+                        "split": split,
                         "trained": score,
                         "random_label": rand_score,
                         "descriptor": desc_score,
@@ -162,6 +170,13 @@ def main():
     ap.add_argument("--latents", type=Path, help="latents.npz from run_overcomplete_sae.py")
     ap.add_argument("--out-dir", required=True, type=Path)
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
+    ap.add_argument("--split", choices=["random", "scaffold"], default="random",
+                    help="scaffold = Bemis-Murcko disjoint; random inflates scores "
+                         "when molecules come from a single policy")
+    ap.add_argument("--suffix", default="", help="appended to output filenames")
+    ap.add_argument("--random-net", type=Path, default=None,
+                    help="embeddings_random_net.npy — untrained network of identical "
+                         "architecture, the A3 random-network control")
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -179,6 +194,22 @@ def main():
     desc = P.compute_descriptor_baseline(smiles)
 
     reps = {"raw": X}
+    if args.random_net and args.random_net.exists():
+        RN = np.load(args.random_net)
+        RN = RN[valid] if RN.shape[0] == valid.size else RN
+        # a molecule the untrained net failed to embed would be a NaN row; drop
+        # those rows from every representation so all probes see the same molecules
+        finite = np.isfinite(RN).all(axis=1)
+        if not finite.all():
+            print(f"  random-net: dropping {int((~finite).sum())} un-embeddable molecules")
+            X = X[finite]
+            RN = RN[finite]
+            reps["raw"] = X
+            targets = targets.loc[finite].reset_index(drop=True)
+            desc = desc[finite]
+            smiles = [s for s, f in zip(smiles, finite) if f]
+        reps["random_net"] = RN
+        print(f"  added random-network control: {RN.shape}")
     if args.latents and args.latents.exists():
         z = np.load(args.latents)
         for key in ("latent", "reconstruction"):
@@ -187,24 +218,31 @@ def main():
                 reps[key] = arr[valid] if arr.shape[0] == valid.size else arr
         print(f"  loaded representations: {list(reps)}")
 
-    print(f"running probes over seeds {args.seeds} ...")
-    df, weights = run_probes(reps, targets, desc, seeds=tuple(args.seeds))
+    print(f"running probes over seeds {args.seeds}, {args.split} split ...")
+    if args.split == "scaffold":
+        tr, va, te, info = P.scaffold_split(smiles, seed=args.seeds[0])
+        print(f"  {info['n_scaffolds']} scaffolds, {info['singleton_scaffolds']} singletons; "
+              f"train {len(tr)} val {len(va)} test {len(te)}")
+    df, weights = run_probes(reps, targets, desc, seeds=tuple(args.seeds),
+                             split=args.split, smiles=smiles)
     df["rdkit_version"] = P.version_info()["rdkit"]
 
-    df.to_csv(args.out_dir / "T_probes.csv", index=False)
+    sfx = args.suffix
+    df.to_csv(args.out_dir / f"T_probes{sfx}.csv", index=False)
     summary = summarize(df)
-    summary.to_csv(args.out_dir / "T_probes_summary.csv", index=False)
+    summary.to_csv(args.out_dir / f"T_probes_summary{sfx}.csv", index=False)
 
     if weights:
         np.savez_compressed(
-            args.out_dir / "probe_weights_latent.npz",
+            args.out_dir / f"probe_weights_latent{sfx}.npz",
             **{f"{t}__seed{s}": w for t, d in weights.items() for s, w in d.items()},
         )
-    (args.out_dir / "probe_meta.json").write_text(
+    (args.out_dir / f"probe_meta{sfx}.json").write_text(
         json.dumps(
             {
                 "n_molecules": int(len(targets)),
                 "seeds": args.seeds,
+                "split": args.split,
                 "representations": list(reps),
                 **P.version_info(),
             },

@@ -272,3 +272,68 @@ def substructure_matrix(smiles: List[str]) -> pd.DataFrame:
             continue
         rows.append({k: int(mol.HasSubstructMatch(p)) for k, p in patts.items()})
     return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------------- data splits
+def murcko_scaffolds(smiles: List[str]) -> List[str]:
+    """Bemis-Murcko scaffold (ring systems + linkers) per molecule.
+
+    Molecules with no ring system return "" and are pooled into one group.
+    """
+    from rdkit.Chem.Scaffolds import MurckoScaffold
+
+    out = []
+    for smi in smiles:
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            out.append("")
+            continue
+        try:
+            out.append(MurckoScaffold.MurckoScaffoldSmiles(mol=mol, includeChirality=False))
+        except Exception:
+            out.append("")
+    return out
+
+
+def scaffold_split(smiles: List[str], seed: int = 0, val_frac=0.10, test_frac=0.10):
+    """Scaffold-disjoint train/val/test indices.
+
+    A random split over molecules sampled from a single generative policy leaks
+    heavily: near-duplicates of the same scaffold land on both sides, so probe
+    scores measure interpolation within a scaffold rather than generalisation to
+    new chemistry. Here whole scaffold groups are assigned to exactly one split.
+
+    Groups are ordered largest-first (the standard deterministic scheme) with the
+    order of equally-sized groups shuffled by ``seed``, so repeated runs give
+    genuinely different scaffold-disjoint splits and error bars mean something.
+    """
+    scaf = murcko_scaffolds(smiles)
+    groups: Dict[str, List[int]] = {}
+    for i, s in enumerate(scaf):
+        groups.setdefault(s, []).append(i)
+
+    rng = np.random.default_rng(seed)
+    keys = list(groups)
+    rng.shuffle(keys)                                  # break size ties randomly
+    keys.sort(key=lambda k: len(groups[k]), reverse=True)
+
+    n = len(smiles)
+    n_train = int(round((1.0 - val_frac - test_frac) * n))
+    n_val = int(round(val_frac * n))
+    train, val, test = [], [], []
+    for k in keys:
+        g = groups[k]
+        # Fill TRAIN first with the largest scaffold families, then val, then
+        # test. This is the DeepChem convention and it is the conservative
+        # direction: the test set ends up holding the rarest scaffolds, so the
+        # probe is asked to generalise to chemistry it has least support for.
+        if len(train) + len(g) <= n_train:
+            train.extend(g)
+        elif len(val) + len(g) <= n_val:
+            val.extend(g)
+        else:
+            test.extend(g)
+    return (np.array(train), np.array(val), np.array(test),
+            {"n_scaffolds": len(groups),
+             "largest_group": max(len(v) for v in groups.values()),
+             "singleton_scaffolds": sum(1 for v in groups.values() if len(v) == 1)})

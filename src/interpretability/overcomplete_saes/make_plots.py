@@ -76,6 +76,25 @@ def style(ax, xlabel=None, ylabel=None, title=None, grid_axis="y"):
         ax.set_title(title, color=INK, fontsize=10.5, loc="left", pad=8)
 
 
+def dodge(values, min_gap):
+    """Shift labels apart so none are closer than ``min_gap``, preserving order.
+
+    Two passes (down then up) so the block stays centred on the original values
+    rather than drifting in one direction.
+    """
+    order = np.argsort(values)[::-1]          # highest first
+    out = np.array(values, dtype=float)
+    for i in range(1, len(order)):
+        hi, lo = order[i - 1], order[i]
+        if out[hi] - out[lo] < min_gap:
+            out[lo] = out[hi] - min_gap
+    for i in range(len(order) - 2, -1, -1):   # relieve downward crowding
+        hi, lo = order[i], order[i + 1]
+        if out[hi] - out[lo] < min_gap:
+            out[hi] = out[lo] + min_gap
+    return out
+
+
 def save(fig, out_dir: Path, name: str):
     out_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png"):
@@ -125,20 +144,31 @@ def fig_gap(summary: pd.DataFrame, out_dir: Path):
     d = d.sort_values("gap_noleak_mean")
     colors = [DIV_HI if v < 0 else DIV_LO for v in d.gap_noleak_mean]
 
-    fig, ax = plt.subplots(figsize=(7.6, 0.42 * len(d) + 1.5))
+    fig, ax = plt.subplots(figsize=(7.8, 0.42 * len(d) + 1.6))
     y = np.arange(len(d))
     ax.barh(y, d.gap_noleak_mean, 0.6, color=colors, zorder=3,
             edgecolor=SURFACE, linewidth=1.0)
     ax.axvline(0, color=INK2, linewidth=1.0, zorder=4)
+    lim = float(np.abs(d.gap_noleak_mean).max())
+    pad = 0.03 * lim
+    # Inside the bar (white ink) only when the bar is long enough to hold the
+    # label; otherwise outside in normal ink. This keeps long negative bars clear
+    # of the y tick labels while leaving near-zero bars (halogen, aromaticity)
+    # legible rather than white-on-white.
+    min_inside = 0.30 * lim
     for yi, v in zip(y, d.gap_noleak_mean):
-        ax.text(v + (0.006 if v >= 0 else -0.006), yi, f"{v:+.3f}",
-                va="center", ha="left" if v >= 0 else "right",
-                fontsize=7.5, color=INK2)
+        if abs(v) >= min_inside:
+            ax.text(v + (pad if v < 0 else -pad), yi, f"{v:+.3f}", va="center",
+                    ha="left" if v < 0 else "right",
+                    fontsize=7.5, color=SURFACE, zorder=5)
+        else:
+            ax.text(v - (pad if v < 0 else -pad), yi, f"{v:+.3f}", va="center",
+                    ha="right" if v < 0 else "left",
+                    fontsize=7.5, color=INK2, zorder=5)
+    ax.set_xlim(-lim * 1.32, lim * 1.32)
     ax.set_yticks(y, d.label, fontsize=8.5, color=INK)
-    style(ax, xlabel="Embedding − descriptor baseline", grid_axis="x",
-          title="Where the learned embedding adds information")
-    ax.text(0.99, 0.02, "right of zero: embedding wins    left: descriptors win",
-            transform=ax.transAxes, ha="right", fontsize=7.5, color=INK3)
+    style(ax, xlabel="Embedding − descriptor baseline   (>0 embedding wins, <0 descriptors win)",
+          grid_axis="x", title="Where the learned embedding adds information")
     save(fig, out_dir, "F2_gap_vs_descriptor_baseline")
 
 
@@ -192,17 +222,26 @@ def fig_preservation(summary: pd.DataFrame, out_dir: Path):
         return
     piv = summary.pivot_table(index="target", columns="representation",
                               values="trained_mean")[have]
-    fig, ax = plt.subplots(figsize=(6.6, 4.6))
+    fig, ax = plt.subplots(figsize=(7.4, 5.0))
     x = np.arange(len(have))
     for t, row in piv.iterrows():
         ax.plot(x, row.values, marker="o", markersize=5, linewidth=1.6,
                 color=S1, alpha=0.75, zorder=3)
-        ax.annotate(PRETTY.get(t, t), (x[-1], row.values[-1]),
-                    xytext=(6, 0), textcoords="offset points",
-                    fontsize=7.5, color=INK2, va="center")
+
+    # labels at the right end, dodged apart and leader-lined back to their point
+    ends = piv[have[-1]].to_numpy()
+    span = float(np.nanmax(ends) - np.nanmin(ends)) or 1.0
+    label_y = dodge(ends, min_gap=0.030 * span)
+    for (t, _row), y_true, y_lab in zip(piv.iterrows(), ends, label_y):
+        ax.annotate(
+            PRETTY.get(t, t), xy=(x[-1], y_true), xytext=(x[-1] + 0.10, y_lab),
+            fontsize=7.5, color=INK2, va="center", ha="left",
+            arrowprops=dict(arrowstyle="-", color=INK3, linewidth=0.6,
+                            shrinkA=0, shrinkB=2),
+        )
     ax.set_xticks(x, ["Raw\nembedding", "SAE\nlatent", "SAE\nreconstruction"][: len(have)],
                   fontsize=8.5, color=INK)
-    ax.set_xlim(-0.25, len(have) - 0.25 + 1.1)
+    ax.set_xlim(-0.25, len(have) - 1 + 1.15)
     style(ax, ylabel="R² or AUROC",
           title="Information retained through the sparse bottleneck")
     save(fig, out_dir, "F4_information_preservation")
@@ -342,6 +381,88 @@ def fig_semanticity(results_dir: Path, out_dir: Path):
     save(fig, out_dir, "F8_feature_semanticity")
 
 
+# --------------------------------------------------- F9 random vs scaffold split
+def fig_split_comparison(results_dir: Path, out_dir: Path):
+    """Does a scaffold-disjoint split change the conclusion? Two panels."""
+    a = results_dir / "T_probes_summary.csv"
+    b = results_dir / "T_probes_summary_scaffold.csv"
+    if not (a.exists() and b.exists()):
+        return
+    r = pd.read_csv(a); r = r[r.representation == "raw"].set_index("target")
+    sc = pd.read_csv(b); sc = sc[sc.representation == "raw"].set_index("target")
+    common = [t for t in PRETTY if t in r.index and t in sc.index]
+    labels = [PRETTY[t] for t in common]
+    y = np.arange(len(common))
+    h = 0.36
+
+    fig, axes = plt.subplots(1, 2, figsize=(11.4, 0.46 * len(common) + 1.8))
+
+    # panel 1: the embedding score itself
+    ax = axes[0]
+    ax.barh(y + h / 2, r.loc[common, "trained_mean"], h, color=S1, zorder=3,
+            edgecolor=SURFACE, linewidth=1.0, label="Random split")
+    ax.barh(y - h / 2, sc.loc[common, "trained_mean"], h, color=S2, zorder=3,
+            edgecolor=SURFACE, linewidth=1.0, label="Scaffold-disjoint split")
+    ax.set_yticks(y, labels, fontsize=8.5, color=INK)
+    ax.set_xlim(0, 1.12)
+    style(ax, xlabel="R² or AUROC", grid_axis="x",
+          title="Embedding score is robust to scaffold splitting")
+    ax.legend(frameon=False, fontsize=8, loc="lower right", labelcolor=INK2)
+
+    # panel 2: the gap vs the descriptor baseline — this is what flips
+    ax = axes[1]
+    gr = r.loc[common, "gap_noleak_mean"]
+    gs = sc.loc[common, "gap_noleak_mean"]
+    ax.barh(y + h / 2, gr, h, color=S1, zorder=3, edgecolor=SURFACE, linewidth=1.0,
+            label="Random split")
+    ax.barh(y - h / 2, gs, h, color=S2, zorder=3, edgecolor=SURFACE, linewidth=1.0,
+            label="Scaffold-disjoint split")
+    ax.axvline(0, color=INK2, linewidth=1.0, zorder=4)
+    ax.set_yticks(y, [""] * len(common))
+    style(ax, xlabel="Embedding − descriptor baseline", grid_axis="x",
+          title="…but the gap vs descriptors moves in the embedding's favour")
+    ax.legend(frameon=False, fontsize=8, loc="lower left", labelcolor=INK2)
+    fig.tight_layout()
+    save(fig, out_dir, "F9_split_comparison")
+
+
+# ------------------------------------------------- F10 random-network control
+def fig_random_network(results_dir: Path, out_dir: Path):
+    """Trained vs UNTRAINED network of identical architecture vs descriptors."""
+    f = results_dir / "T_probes_summary_randomnet.csv"
+    if not f.exists():
+        return
+    d = pd.read_csv(f)
+    if "random_net" not in set(d.representation):
+        return
+    tr = d[d.representation == "raw"].set_index("target")
+    rn = d[d.representation == "random_net"].set_index("target")
+    common = [t for t in PRETTY if t in tr.index and t in rn.index]
+    order = sorted(common, key=lambda t: tr.loc[t, "trained_mean"])
+    labels = [PRETTY[t] for t in order]
+    y = np.arange(len(order))
+    h = 0.26
+
+    fig, ax = plt.subplots(figsize=(8.6, 0.46 * len(order) + 1.8))
+    ax.barh(y + h, tr.loc[order, "trained_mean"], h, color=S1, zorder=3,
+            edgecolor=SURFACE, linewidth=1.0, label="Trained SynFlowNet")
+    ax.barh(y, rn.loc[order, "trained_mean"], h, color=S2, zorder=3,
+            edgecolor=SURFACE, linewidth=1.0,
+            label="UNTRAINED net, identical architecture")
+    ax.barh(y - h, tr.loc[order, "descriptor_noleak_mean"], h, color=S3, zorder=3,
+            edgecolor=SURFACE, linewidth=1.0, label="RDKit descriptors + ECFP4")
+    for yi, v in zip(y + h, tr.loc[order, "trained_mean"]):
+        ax.text(v + 0.012, yi, f"{v:.3f}", va="center", fontsize=7, color=INK2)
+    for yi, v in zip(y, rn.loc[order, "trained_mean"]):
+        ax.text(v + 0.012, yi, f"{v:.3f}", va="center", fontsize=7, color=INK2)
+    ax.set_yticks(y, labels, fontsize=8.5, color=INK)
+    ax.set_xlim(-0.05, 1.18)
+    style(ax, xlabel="R² or AUROC", grid_axis="x",
+          title="Does training matter? Trained vs untrained network")
+    ax.legend(frameon=False, fontsize=8, loc="lower right", labelcolor=INK2)
+    save(fig, out_dir, "F10_random_network_control")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--results-dir", required=True, type=Path)
@@ -365,6 +486,8 @@ def main():
     fig_stability(args.results_dir, args.out_dir)
     fig_intervention(args.results_dir, args.out_dir)
     fig_semanticity(args.results_dir, args.out_dir)
+    fig_split_comparison(args.results_dir, args.out_dir)
+    fig_random_network(args.results_dir, args.out_dir)
     print(f"\nfigures in {args.out_dir}/ (PDF for the manuscript, PNG for preview)")
 
 
