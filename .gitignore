@@ -172,3 +172,29 @@ cython_debug/
 src/interpretability/overcomplete_saes/cache/
 src/interpretability/overcomplete_saes/**/latents.npz
 src/interpretability/overcomplete_saes/**/*.pt
+
+# Internal steering experiment planning — contains Montility dataset IDs, S3
+# pipeline paths, and unreleased-program references. Keep out of the public repo.
+src/interpretability/steering_experiments/STEERING_EXPERIMENT_PLAN_v2.md
+src/interpretability/steering_experiments/*.pdf
+
+# Training runs under steering_experiments. Ignored WHOLESALE, configs included.
+# Two reasons: the artifacts (46 MB checkpoints, molecule DBs, tfevents) are
+# large and regenerable; and the configs name an internal program target and
+# compound series (see the potency run), which the steering plan requires be
+# kept out of external outputs. Also ignores extracted embeddings.
+src/interpretability/steering_experiments/run_*/
+src/interpretability/steering_experiments/emb_*/
+
+# Per-molecule dumps from the steering sweeps: one row per generated molecule, up to 93 MB each
+# and >500 MB in total. Regenerable by re-running the arm (phase09/run_*.sh), and every number in
+# PAPER_RESULTS.md is computed from the per-CONDITION summaries and verdict JSONs, which ARE
+# tracked. Keeping the dumps out is what makes the rest committable at all.
+src/interpretability/steering_experiments/phase09/results*/*molecules*.csv
+src/interpretability/steering_experiments/phase09/results*/embeddings*.npy
+
+# Unpublished follow-on work and local experiment scaffolding. Versioned elsewhere; excluded
+# here so a `git add -A` cannot pull them in. This repository serves the arXiv 2511.19264 code
+# citation, which points at src/interpretability.
+src/interpretability/paper_results/
+src/interpretability/steering_experiments/
